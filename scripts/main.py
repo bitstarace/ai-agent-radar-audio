@@ -33,7 +33,6 @@ def wav_to_m4a(wav_path: str, m4a_path: str) -> None:
 
 def main() -> None:
     api_key = os.environ["GEMINI_API_KEY"]
-    service_account_json_path = os.environ["GDRIVE_SERVICE_ACCOUNT_JSON_PATH"]
     folder_id = os.environ["GDRIVE_FOLDER_ID"]
 
     report_name, report_body = get_latest_report()
@@ -57,7 +56,7 @@ def main() -> None:
 
         wav_to_m4a(wav_path, m4a_path)
 
-        uploaded = upload_file(service_account_json_path, m4a_path, folder_id)
+        uploaded = upload_file(m4a_path, folder_id)
         print(f"[4/4] Google Driveへアップロード完了: {uploaded.get('name')} (id={uploaded.get('id')})")
         print(uploaded.get("webViewLink", ""))
 

@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 *.wav
 *.m4a
+client_secret.json
