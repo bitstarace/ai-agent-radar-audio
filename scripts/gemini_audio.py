@@ -8,7 +8,7 @@ import wave
 from google import genai
 from google.genai import types
 
-SCRIPT_MODEL = os.environ.get("GEMINI_SCRIPT_MODEL", "gemini-2.5-flash")
+SCRIPT_MODEL = os.environ.get("GEMINI_SCRIPT_MODEL", "gemini-3.8-flash")
 TTS_MODEL = os.environ.get("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts")
 
 SPEAKER_A = "ホストA"
