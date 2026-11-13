@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import io
 import os
+import time
 import wave
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 
-SCRIPT_MODEL = os.environ.get("GEMINI_SCRIPT_MODEL", "gemini-3.8-flash")
+SCRIPT_MODEL = os.environ.get("GEMINI_SCRIPT_MODEL", "gemini-2.5-flash")
 TTS_MODEL = os.environ.get("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts")
 
 SPEAKER_A = "ホストA"
@@ -40,11 +42,27 @@ Claude Code/AIエージェント関連の動向をまとめた日次レポート
 """
 
 
+def _call_with_retry(fn, attempts: int = 5, base_wait: int = 30):
+    """一時的なサーバー側エラー(429/500/503)のときだけ、待ってから再試行する。"""
+    for i in range(attempts):
+        try:
+            return fn()
+        except genai_errors.APIError as exc:
+            retryable = getattr(exc, "code", None) in (429, 500, 503)
+            if not retryable or i == attempts - 1:
+                raise
+            wait = base_wait * (2**i)  # 30, 60, 120, 240 秒
+            print(f"一時エラー({exc.code})。{wait}秒後に再試行 ({i + 1}/{attempts - 1})")
+            time.sleep(wait)
+
+
 def generate_dialogue_script(client: genai.Client, report_markdown: str) -> str:
     prompt = SCRIPT_PROMPT_TEMPLATE.format(
         speaker_a=SPEAKER_A, speaker_b=SPEAKER_B, report=report_markdown
     )
-    response = client.models.generate_content(model=SCRIPT_MODEL, contents=prompt)
+    response = _call_with_retry(
+        lambda: client.models.generate_content(model=SCRIPT_MODEL, contents=prompt)
+    )
     text = (response.text or "").strip()
     if not text:
         raise RuntimeError("Geminiから台本テキストが返されませんでした")
@@ -53,34 +71,36 @@ def generate_dialogue_script(client: genai.Client, report_markdown: str) -> str:
 
 def synthesize_audio(client: genai.Client, dialogue_script: str) -> bytes:
     """dialogue_script を読み上げ、PCM(16bit/24kHz/mono)のバイト列を返す。"""
-    response = client.models.generate_content(
-        model=TTS_MODEL,
-        contents=dialogue_script,
-        config=types.GenerateContentConfig(
-            response_modalities=["AUDIO"],
-            speech_config=types.SpeechConfig(
-                multi_speaker_voice_config=types.MultiSpeakerVoiceConfig(
-                    speaker_voice_configs=[
-                        types.SpeakerVoiceConfig(
-                            speaker=SPEAKER_A,
-                            voice_config=types.VoiceConfig(
-                                prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                    voice_name=VOICE_A
-                                )
+    response = _call_with_retry(
+        lambda: client.models.generate_content(
+            model=TTS_MODEL,
+            contents=dialogue_script,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(
+                    multi_speaker_voice_config=types.MultiSpeakerVoiceConfig(
+                        speaker_voice_configs=[
+                            types.SpeakerVoiceConfig(
+                                speaker=SPEAKER_A,
+                                voice_config=types.VoiceConfig(
+                                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                        voice_name=VOICE_A
+                                    )
+                                ),
                             ),
-                        ),
-                        types.SpeakerVoiceConfig(
-                            speaker=SPEAKER_B,
-                            voice_config=types.VoiceConfig(
-                                prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                    voice_name=VOICE_B
-                                )
+                            types.SpeakerVoiceConfig(
+                                speaker=SPEAKER_B,
+                                voice_config=types.VoiceConfig(
+                                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                        voice_name=VOICE_B
+                                    )
+                                ),
                             ),
-                        ),
-                    ]
-                )
+                        ]
+                    )
+                ),
             ),
-        ),
+        )
     )
     part = response.candidates[0].content.parts[0]
     pcm_bytes = part.inline_data.data
