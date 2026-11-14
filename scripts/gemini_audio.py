@@ -11,7 +11,7 @@ from google.genai import errors as genai_errors
 from google.genai import types
 
 SCRIPT_MODEL = os.environ.get("GEMINI_SCRIPT_MODEL", "gemini-2.5-flash")
-TTS_MODEL = os.environ.get("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts")
+TTS_MODEL = os.environ.get("GEMINI_TTS_MODEL", "gemini-3.8-flash-tts")
 
 SPEAKER_A = "ホストA"
 SPEAKER_B = "ホストB"
