@@ -9,7 +9,7 @@ import tempfile
 from google import genai
 
 from drive_upload import upload_file
-from fetch_report import get_latest_report
+from fetch_report import MAX_REPOS, get_latest_report, limit_repos
 from gemini_audio import generate_dialogue_script, pcm_to_wav_bytes, synthesize_audio
 
 
@@ -36,7 +36,12 @@ def main() -> None:
     folder_id = os.environ["GDRIVE_FOLDER_ID"]
 
     report_name, report_body = get_latest_report()
-    print(f"[1/4] レポート取得: {report_name} ({len(report_body)} chars)")
+    full_len = len(report_body)
+    report_body = limit_repos(report_body, MAX_REPOS)
+    print(
+        f"[1/4] レポート取得: {report_name} "
+        f"({full_len} chars → GitHubリポジトリ先頭{MAX_REPOS}件に絞り込み {len(report_body)} chars)"
+    )
 
     client = genai.Client(api_key=api_key)
 
