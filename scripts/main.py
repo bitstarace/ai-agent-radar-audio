@@ -11,7 +11,7 @@ from google.genai import types
 
 from drive_upload import upload_file
 from fetch_report import MAX_REPOS, get_latest_report, limit_repos
-from gemini_audio import generate_dialogue_script, pcm_to_wav_bytes, synthesize_audio
+from gemini_audio import generate_dialogue_script, pcm_stats, pcm_to_wav_bytes, synthesize_audio
 
 
 def wav_to_m4a(wav_path: str, m4a_path: str) -> None:
@@ -30,6 +30,27 @@ def wav_to_m4a(wav_path: str, m4a_path: str) -> None:
         check=True,
         capture_output=True,
     )
+
+
+def _diag_m4a(path: str) -> None:
+    """変換後m4aの長さ・コーデック・音量をログに出す(診断用。失敗しても処理は続ける)。"""
+    cmds = {
+        "ffprobe": [
+            "ffprobe", "-v", "error", "-show_entries",
+            "stream=codec_name,sample_rate,channels,duration:format=duration,size",
+            "-of", "default=nw=1", path,
+        ],
+        "volumedetect": ["ffmpeg", "-hide_banner", "-i", path, "-af", "volumedetect", "-f", "null", "-"],
+    }
+    for name, cmd in cmds.items():
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            out = (r.stdout + r.stderr).strip().splitlines()
+            if name == "volumedetect":
+                out = [l for l in out if "mean_volume" in l or "max_volume" in l]
+            print(f"[diag] {name}: " + " | ".join(l.strip() for l in out))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[diag] {name} 失敗: {exc}")
 
 
 def main() -> None:
@@ -52,6 +73,7 @@ def main() -> None:
 
     pcm_bytes = synthesize_audio(client, script_text)
     print(f"[3/4] 音声合成完了 ({len(pcm_bytes)} bytes PCM)")
+    print(f"[diag] PCM: {pcm_stats(pcm_bytes)}")
 
     date_stamp = os.path.splitext(report_name)[0]
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -62,6 +84,7 @@ def main() -> None:
             f.write(pcm_to_wav_bytes(pcm_bytes))
 
         wav_to_m4a(wav_path, m4a_path)
+        _diag_m4a(m4a_path)
 
         uploaded = upload_file(m4a_path, folder_id)
         print(f"[4/4] Google Driveへアップロード完了: {uploaded.get('name')} (id={uploaded.get('id')})")

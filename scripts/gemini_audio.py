@@ -138,9 +138,30 @@ def synthesize_audio(client: genai.Client, dialogue_script: str) -> bytes:
     )
     part = response.candidates[0].content.parts[0]
     pcm_bytes = part.inline_data.data
+    print(
+        f"[diag] TTS inline_data: mime_type={part.inline_data.mime_type!r} "
+        f"type={type(pcm_bytes).__name__} len={len(pcm_bytes or b'')} "
+        f"head={bytes(pcm_bytes[:16]).hex() if pcm_bytes else ''}"
+    )
     if not pcm_bytes:
         raise RuntimeError("Gemini TTSから音声データが返されませんでした")
     return pcm_bytes
+
+
+def pcm_stats(pcm_bytes: bytes) -> str:
+    """16bit little-endian PCM の簡易統計(診断用)。最大値・RMS・ゼロ比率。"""
+    import array
+    import math
+
+    n = len(pcm_bytes) // 2
+    if n == 0:
+        return "samples=0"
+    samples = array.array("h")
+    samples.frombytes(pcm_bytes[: n * 2])
+    peak = max(abs(x) for x in samples)
+    rms = math.sqrt(sum(x * x for x in samples) / n)
+    zero_ratio = sum(1 for x in samples if x == 0) / n
+    return f"samples={n} peak={peak}/32767 rms={rms:.1f} zero_ratio={zero_ratio:.3f}"
 
 
 def pcm_to_wav_bytes(
