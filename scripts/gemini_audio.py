@@ -164,6 +164,29 @@ def pcm_stats(pcm_bytes: bytes) -> str:
     return f"samples={n} peak={peak}/32767 rms={rms:.1f} zero_ratio={zero_ratio:.3f}"
 
 
+def ensure_wav_bytes(audio_bytes: bytes) -> tuple[bytes, str]:
+    """TTSの出力をWAVバイト列にして返す。(wav_bytes, 診断用の説明) を返す。
+
+    Gemini TTS は mime_type='audio/wav' のWAVコンテナを返すことがある。
+    その場合は再度ヘッダを付けず、そのまま使う(二重ヘッダだと音が壊れる)。
+    RIFF/WAVEで始まらない場合のみ、生PCM(16bit/24kHz/mono)としてヘッダを付ける。
+    """
+    if audio_bytes[:4] == b"RIFF" and audio_bytes[8:12] == b"WAVE":
+        try:
+            with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
+                info = (
+                    f"WAVコンテナをそのまま使用 channels={wf.getnchannels()} "
+                    f"sampwidth={wf.getsampwidth()} rate={wf.getframerate()} "
+                    f"frames={wf.getnframes()} ({wf.getnframes() / wf.getframerate():.1f}秒)"
+                )
+                if wf.getsampwidth() == 2:
+                    info += " | " + pcm_stats(wf.readframes(wf.getnframes()))
+        except wave.Error as exc:
+            info = f"WAVコンテナをそのまま使用(wavモジュールでは解析不可: {exc})"
+        return audio_bytes, info
+    return pcm_to_wav_bytes(audio_bytes), f"生PCMとしてヘッダを付与 | {pcm_stats(audio_bytes)}"
+
+
 def pcm_to_wav_bytes(
     pcm_bytes: bytes, channels: int = 1, rate: int = 24000, sample_width: int = 2
 ) -> bytes:

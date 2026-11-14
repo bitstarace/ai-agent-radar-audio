@@ -11,7 +11,7 @@ from google.genai import types
 
 from drive_upload import upload_file
 from fetch_report import MAX_REPOS, get_latest_report, limit_repos
-from gemini_audio import generate_dialogue_script, pcm_stats, pcm_to_wav_bytes, synthesize_audio
+from gemini_audio import ensure_wav_bytes, generate_dialogue_script, synthesize_audio
 
 
 def wav_to_m4a(wav_path: str, m4a_path: str) -> None:
@@ -71,9 +71,10 @@ def main() -> None:
     script_text = generate_dialogue_script(client, report_body)
     print(f"[2/4] 台本生成完了 ({len(script_text)} chars)")
 
-    pcm_bytes = synthesize_audio(client, script_text)
-    print(f"[3/4] 音声合成完了 ({len(pcm_bytes)} bytes PCM)")
-    print(f"[diag] PCM: {pcm_stats(pcm_bytes)}")
+    audio_bytes = synthesize_audio(client, script_text)
+    wav_bytes, wav_info = ensure_wav_bytes(audio_bytes)
+    print(f"[3/4] 音声合成完了 ({len(audio_bytes)} bytes)")
+    print(f"[diag] {wav_info}")
 
     date_stamp = os.path.splitext(report_name)[0]
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -81,7 +82,7 @@ def main() -> None:
         m4a_path = os.path.join(tmpdir, f"{date_stamp}.m4a")
 
         with open(wav_path, "wb") as f:
-            f.write(pcm_to_wav_bytes(pcm_bytes))
+            f.write(wav_bytes)
 
         wav_to_m4a(wav_path, m4a_path)
         _diag_m4a(m4a_path)
