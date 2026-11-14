@@ -69,12 +69,46 @@ def generate_dialogue_script(client: genai.Client, report_markdown: str) -> str:
     return text
 
 
+def build_speaker_contents(dialogue_script: str) -> list[types.Content]:
+    """台本を「話者: 発言」の行ごとに分け、speech_metadata.speaker 付きのPartにする。
+
+    マルチスピーカーTTSは、各text partに話者の指定が必要。
+    話者のプレフィックスが無い行は、直前の話者の発言の続きとして扱う。
+    """
+    speakers = (SPEAKER_A, SPEAKER_B)
+    turns: list[list[str]] = []  # [話者, 本文]
+    for raw in dialogue_script.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        for sp in speakers:
+            for sep in (":", "："):
+                prefix = f"{sp}{sep}"
+                if line.startswith(prefix):
+                    turns.append([sp, line[len(prefix):].strip()])
+                    break
+            else:
+                continue
+            break
+        else:
+            if turns:
+                turns[-1][1] += " " + line
+    turns = [t for t in turns if t[1]]
+    if not turns:
+        raise RuntimeError("台本から話者付きの発言を抽出できませんでした")
+    parts = [
+        types.Part(text=text, speech_metadata=types.SpeechMetadata(speaker=sp))
+        for sp, text in turns
+    ]
+    return [types.Content(role="user", parts=parts)]
+
+
 def synthesize_audio(client: genai.Client, dialogue_script: str) -> bytes:
     """dialogue_script を読み上げ、PCM(16bit/24kHz/mono)のバイト列を返す。"""
     response = _call_with_retry(
         lambda: client.models.generate_content(
             model=TTS_MODEL,
-            contents=dialogue_script,
+            contents=build_speaker_contents(dialogue_script),
             config=types.GenerateContentConfig(
                 response_modalities=["AUDIO"],
                 speech_config=types.SpeechConfig(
