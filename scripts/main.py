@@ -7,6 +7,7 @@ import sys
 import tempfile
 
 from google import genai
+from google.genai import types
 
 from drive_upload import upload_file
 from fetch_report import MAX_REPOS, get_latest_report, limit_repos
@@ -43,7 +44,8 @@ def main() -> None:
         f"({full_len} chars → GitHubリポジトリ先頭{MAX_REPOS}件に絞り込み {len(report_body)} chars)"
     )
 
-    client = genai.Client(api_key=api_key)
+    # speechConfig(TTS)はv1beta専用。SDK 3.x の既定は v1 のため明示する
+    client = genai.Client(api_key=api_key, http_options=types.HttpOptions(api_version="v1beta"))
 
     script_text = generate_dialogue_script(client, report_body)
     print(f"[2/4] 台本生成完了 ({len(script_text)} chars)")
