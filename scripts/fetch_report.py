@@ -9,7 +9,7 @@ SOURCE_REPO = "takeday/ai-agent-radar"
 REPORTS_PATH = "reports"
 
 
-MAX_REPOS = int(os.environ.get("MAX_REPOS", "15"))
+MAX_REPOS = int(os.environ.get("MAX_REPOS", "20"))
 _REPO_SECTION = "## 新規・トレンド GitHub リポジトリ"
 
 
